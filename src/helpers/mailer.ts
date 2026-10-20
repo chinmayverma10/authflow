@@ -38,7 +38,7 @@ export const sendEmail = async ({
     ? "/verifyemail"
     : "/resetpassword";
 
-  const url = new URL(path, domain);
+  const url = new URL(path, process.env.DOMAIN);
   url.searchParams.set("token", token);
 
   const update = isVerification
