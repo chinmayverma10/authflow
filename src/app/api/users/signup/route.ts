@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error: unknown) {
-    console.error("Signup request failed.");
+    console.error("Signup request failed.", error);
 
     if (
       typeof error === "object" &&
