@@ -1,13 +1,45 @@
-
 import { connect } from "@/dbConfig/dbconfig";
 import User from "@/models/userModel";
 import { NextRequest, NextResponse } from "next/server";
 import bcryptjs from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { loginRateLimiter } from "@/helpers/ratelimiter";
+import { getRateLimitIdentifier } from "@/helpers/getRateLimitIdentifier";
 
-connect();
+
 
 export async function POST(request: NextRequest) {
+  const identifier = getRateLimitIdentifier(request);
+  try {
+    const result = await loginRateLimiter.limit(identifier);
+
+    if (!result.success) {
+      const retryAfter = Math.max(
+        1,
+        Math.ceil((result.reset - Date.now()) / 1000),
+      );
+
+      return NextResponse.json(
+        {
+          error: "Too many login attempts. Please try again later.",
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(retryAfter),
+          },
+        },
+      );
+    }
+  } catch (error) {
+    console.error("Login rate limiter unavailable:", error);
+
+    return NextResponse.json(
+      { error: "Login temporarily unavailable. Please try again later." },
+      { status: 503 },
+    );
+  }
+
   try {
     const reqBody = await request.json();
     const { email, password } = reqBody;
@@ -21,11 +53,12 @@ export async function POST(request: NextRequest) {
     ) {
       return NextResponse.json(
         { error: "Email and password are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Step 2: Find the user
+    await connect();
     const user = await User.findOne({
       email: email.trim().toLowerCase(),
     });
@@ -33,20 +66,17 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json(
         { error: "Invalid email or password" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
     // Step 3: Check the password
-    const isPasswordCorrect = await bcryptjs.compare(
-      password,
-      user.password
-    );
+    const isPasswordCorrect = await bcryptjs.compare(password, user.password);
 
     if (!isPasswordCorrect) {
       return NextResponse.json(
         { error: "Invalid email or password" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -58,14 +88,14 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(
         { error: "Authentication service unavailable" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     // Step 5: Generate JWT
     const tokenData = {
       id: user._id.toString(),
-      tokenVersion: user.tokenVersion ?? 0
+      tokenVersion: user.tokenVersion ?? 0,
     };
 
     const token = jwt.sign(tokenData, secret, {
@@ -78,7 +108,7 @@ export async function POST(request: NextRequest) {
         message: "User logged in successfully",
         success: true,
       },
-      { status: 200 }
+      { status: 200 },
     );
 
     // Step 7: Set secure authentication cookie
@@ -96,7 +126,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       { error: "Error while logging in user" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
