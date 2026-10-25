@@ -1,11 +1,11 @@
-
 import type { NextRequest } from "next/server";
 import jwt from "jsonwebtoken";
 import { connect } from "@/dbConfig/dbconfig";
 import User from "@/models/userModel";
+import { performance } from "node:perf_hooks";
 
 export const getDataFromToken = async (
-  request: NextRequest
+  request: NextRequest,
 ): Promise<string> => {
   const token = request.cookies.get("token")?.value;
   const secret = process.env.TOKEN_SECRET;
@@ -21,7 +21,17 @@ export const getDataFromToken = async (
 
   try {
     // Step 1: Verify JWT signature and expiration
+    const jwtStart = performance.now();
+
     const decoded = jwt.verify(token, secret);
+
+    const jwtTime = performance.now() - jwtStart;
+
+    if (process.env.PERF_LOGGING === "true") {
+      console.log("[JWT PERFORMANCE]", {
+        jwtMs: Number(jwtTime.toFixed(2)),
+      });
+    }
 
     // Step 2: Validate JWT payload
     if (
@@ -37,9 +47,7 @@ export const getDataFromToken = async (
     await connect();
 
     // Step 4: Find the user
-    const user = await User.findById(decoded.id)
-      .select("tokenVersion")
-      .lean();
+    const user = await User.findById(decoded.id).select("tokenVersion").lean();
 
     if (!user) {
       throw new Error("User no longer exists");
