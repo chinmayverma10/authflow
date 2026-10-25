@@ -1,33 +1,25 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { getDataFromToken } from "@/helpers/getDataFromToken";
-import User from "@/models/userModel";
+import { getAuthenticatedProfile } from "@/helpers/getAuthenticatedProfile";
+import { performance } from "node:perf_hooks";
 
 export async function GET(request: NextRequest) {
+  const start = performance.now();
+
   try {
-    // Get authenticated user's ID
-    const userId = await getDataFromToken(request);
+    // Authenticate and fetch profile using one DB query.
+    const user = await getAuthenticatedProfile(request);
 
-    // Fetch only the fields needed by the UI
-    const user = await User.findById(userId)
-      .select("username email isVerified")
-      .lean();
+    const totalTime = performance.now() - start;
 
-    if (!user) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      );
+    if (process.env.PERF_LOGGING === "true") {
+      console.log("[PROFILE PERFORMANCE]", {
+        totalMs: Number(totalTime.toFixed(2)),
+      });
     }
 
     return NextResponse.json(
-      {
-        user: {
-          username: user.username,
-          email: user.email,
-          isVerified: user.isVerified,
-        },
-      },
+      { user },
       { status: 200 }
     );
   } catch {

@@ -1,19 +1,25 @@
+
 import mongoose from "mongoose";
 
-export async function connect () {
-    try {
-        mongoose.connect(process.env.MONGO_URL!);
-        const connection = mongoose.connection;
+let connectionPromise: Promise<typeof mongoose> | null = null;
 
-        connection.on('connected',()=>{
-            console.log("DB connection successfull ");
-        })
-        connection.on('error',(err)=>{
-            console.log("DB connection failed " + err);
-            process.exit();
-        })
-    } catch (error) {
-        console.log("Something went wrong");
-        console.log(error);
+export async function connect(): Promise<typeof mongoose> {
+  if (mongoose.connection.readyState === 1) {
+    return mongoose;
+  }
+
+  if (!connectionPromise) {
+    const mongoUrl = process.env.MONGO_URL;
+
+    if (!mongoUrl) {
+      throw new Error("MONGO_URL is not configured");
     }
+
+    connectionPromise = mongoose.connect(mongoUrl).catch((error) => {
+      connectionPromise = null;
+      throw error;
+    });
+  }
+
+  return connectionPromise;
 }
